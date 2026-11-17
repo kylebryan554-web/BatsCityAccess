@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b5394">
+<meta name="description" content="Offline guide to Batangas City government services, programs, policies and offices.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Batangas City Info</title>
+<style>
+  :root{--bg:#f4f7fb;--card:#fff;--ink:#14202e;--muted:#5b6b7c;--brand:#0b5394;--brand2:#e8f1fa;--line:#dbe4ee;--ok:#1b7f4b;--warn:#b45309;--danger:#b42318}
+  @media (prefers-color-scheme:dark){:root{--bg:#0e1620;--card:#162331;--ink:#e8eef5;--muted:#9fb0c2;--brand:#6db3f2;--brand2:#1b3047;--line:#26384b;--ok:#4cc38a;--warn:#f0a95b;--danger:#ff8a7a}}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  header{position:sticky;top:0;z-index:5;background:var(--brand);color:#fff;padding:12px 16px 10px}
+  @media (prefers-color-scheme:dark){header{background:#0b2a45}}
+  h1{margin:0;font-size:1.15rem}
+  .sub{font-size:.78rem;opacity:.9;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:#9aa;}
+  .dot.on{background:#4ade80}.dot.off{background:#fbbf24}
+  .search{margin-top:10px;display:flex;gap:8px}
+  .search input{flex:1;padding:11px 12px;border:0;border-radius:10px;font-size:1rem;background:#fff;color:#14202e}
+  .search button{border:0;border-radius:10px;padding:0 12px;background:rgba(255,255,255,.2);color:#fff;font-size:.85rem;cursor:pointer}
+  .search button:disabled{opacity:.5}
+  nav{display:flex;gap:8px;overflow-x:auto;padding:10px 16px;background:var(--bg);position:sticky;top:105px;z-index:4;scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:7px 13px;font-size:.88rem;cursor:pointer}
+  .chip[aria-pressed=true]{background:var(--brand);color:#fff;border-color:var(--brand)}
+  @media (prefers-color-scheme:dark){.chip[aria-pressed=true]{color:#0e1620}}
+  main{padding:4px 16px 90px;max-width:760px;margin:0 auto}
+  .count{font-size:.82rem;color:var(--muted);margin:4px 2px 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+  .card.emergency{border-left:5px solid var(--danger)}
+  .card button.head{all:unset;display:block;width:100%;box-sizing:border-box;padding:13px 14px;cursor:pointer}
+  .card .t{font-weight:650}
+  .card .s{font-size:.9rem;color:var(--muted);margin-top:2px}
+  .tag{display:inline-block;font-size:.7rem;background:var(--brand2);color:var(--brand);padding:2px 8px;border-radius:999px;margin-bottom:5px}
+  .body{display:none;padding:0 14px 14px;font-size:.92rem}
+  .card.open .body{display:block}
+  .body h4{margin:12px 0 3px;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .body ul{margin:0;padding-left:18px}
+  .call{display:inline-block;margin-top:10px;background:var(--brand);color:#fff;text-decoration:none;padding:9px 14px;border-radius:10px;font-weight:600}
+  @media (prefers-color-scheme:dark){.call{color:#0e1620}}
+  .src{margin-top:10px;font-size:.75rem;color:var(--muted);word-break:break-all}
+  .empty{text-align:center;color:var(--muted);padding:40px 10px}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#14202e;color:#fff;padding:10px 16px;border-radius:12px;font-size:.88rem;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:10}
+  .toast.show{opacity:1}
+  footer{max-width:760px;margin:0 auto;padding:0 16px 40px;font-size:.78rem;color:var(--muted)}
+  .install{display:none;margin:6px 16px 0;max-width:728px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Batangas City Info</h1>
+  <div class="sub">
+    <span><span id="dot" class="dot"></span> <span id="net">Checking…</span></span>
+    <span>·</span><span id="upd">Loading data…</span>
+  </div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search: permit, senior, scholarship, fire…" autocomplete="off" aria-label="Search">
+    <button id="sync" type="button">Update</button>
+  </div>
+</header>
+<nav id="chips" aria-label="Categories"></nav>
+<div id="installBar" class="install"><button class="chip" id="installBtn" type="button">Install app on this device</button></div>
+<main>
+  <div class="count" id="count"></div>
+  <div id="list"></div>
+</main>
+<footer>
+  Information is compiled from official Batangas City Government pages and may change. Phone numbers, fees and requirements should be confirmed with the office. This is a student project and not an official government app.
+</footer>
+<div id="toast" class="toast" role="status"></div>
+
+<script>
+(function(){
+  'use strict';
+  var DATA_URL = 'data.json';
+  var LS_KEY = 'bcinfo:data';
+  var state = { data:null, cat:'all', q:'' };
+
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},2800); }
+
+  function saveLocal(d){ try{ localStorage.setItem(LS_KEY, JSON.stringify(d)); }catch(e){} }
+  function loadLocal(){ try{ var s=localStorage.getItem(LS_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
+
+  function setNet(){
+    var on = navigator.onLine;
+    $('dot').className = 'dot ' + (on?'on':'off');
+    $('net').textContent = on ? 'Online' : 'Offline mode';
+    $('sync').disabled = !on;
+  }
+
+  function telHref(c){
+    // use the first number found in the contact string
+    var m = String(c||'').match(/(\+?[\d][\d\-\s\(\)]{5,}\d)/);
+    return m ? 'tel:' + m[1].replace(/[^\d+]/g,'') : null;
+  }
+
+  function matches(it){
+    if(state.cat!=='all' && it.cat!==state.cat) return false;
+    if(!state.q) return true;
+    var hay=[it.title,it.summary,it.office,it.contact,(it.tags||[]).join(' '),(it.details||[]).join(' '),(it.requirements||[]).join(' ')].join(' ').toLowerCase();
+    return state.q.toLowerCase().split(/\s+/).every(function(w){return hay.indexOf(w)>-1;});
+  }
+
+  function renderChips(){
+    var d=state.data, html='';
+    html += chip('all','All');
+    d.categories.forEach(function(c){ html += chip(c.id, c.icon+' '+c.label); });
+    $('chips').innerHTML = html;
+    function chip(id,label){ return '<button class="chip" data-cat="'+esc(id)+'" aria-pressed="'+(state.cat===id)+'">'+esc(label)+'</button>'; }
+  }
+
+  function renderList(){
+    var d=state.data, items=d.items.filter(matches);
+    var catMap={}; d.categories.forEach(function(c){catMap[c.id]=c;});
+    $('count').textContent = items.length + (items.length===1?' result':' results');
+    if(!items.length){ $('list').innerHTML='<div class="empty">No matches. Try a different word, or pick “All”.</div>'; return; }
+    $('list').innerHTML = items.map(function(it){
+      var c=catMap[it.cat]||{label:it.cat,icon:''};
+      var b='';
+      if(it.office) b+='<h4>Office</h4><div>'+esc(it.office)+'</div>';
+      if(it.hours) b+='<h4>Hours</h4><div>'+esc(it.hours)+'</div>';
+      if(it.time) b+='<h4>Processing time</h4><div>'+esc(it.time)+'</div>';
+      if(it.fees) b+='<h4>Fees</h4><div>'+esc(it.fees)+'</div>';
+      if(it.requirements&&it.requirements.length) b+='<h4>Requirements</h4><ul>'+it.requirements.map(function(r){return '<li>'+esc(r)+'</li>';}).join('')+'</ul>';
+      if(it.details&&it.details.length) b+='<h4>Notes</h4><ul>'+it.details.map(function(r){return '<li>'+esc(r)+'</li>';}).join('')+'</ul>';
+      if(it.contact) b+='<h4>Contact</h4><div>'+esc(it.contact)+'</div>';
+      var th=telHref(it.contact);
+      if(th) b+='<a class="call" href="'+esc(th)+'">Call</a>';
+      if(it.source) b+='<div class="src">Source: '+esc(it.source)+'</div>';
+      return '<article class="card '+esc(it.cat)+'" id="c-'+esc(it.id)+'">'
+        +'<button class="head" aria-expanded="false" data-id="'+esc(it.id)+'">'
+        +'<span class="tag">'+esc(c.icon+' '+c.label)+'</span>'
+        +'<div class="t">'+esc(it.title)+'</div>'
+        +'<div class="s">'+esc(it.summary||'')+'</div></button>'
+        +'<div class="body">'+b+'</div></article>';
+    }).join('');
+  }
+
+  function renderAll(){
+    if(!state.data) return;
+    $('upd').textContent = 'Data updated ' + state.data.updated + ' (v' + state.data.version + ')';
+    renderChips(); renderList();
+  }
+
+  // Load: show cached copy immediately, then try to refresh from the network.
+  function fetchRemote(manual){
+    return fetch(DATA_URL + '?t=' + Date.now(), { cache:'no-store' })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(d){
+        if(!d || !Array.isArray(d.items) || !Array.isArray(d.categories)) throw new Error('Bad data');
+        var cur = state.data;
+        var changed = !cur || d.version!==cur.version || d.updated!==cur.updated || JSON.stringify(d.items)!==JSON.stringify(cur.items);
+        state.data = d; saveLocal(d);
+        if(changed){ renderAll(); toast(cur ? 'Information updated' : 'Data loaded'); }
+        else if(manual){ toast('Already up to date'); }
+      });
+  }
+
+  function init(){
+    setNet();
+    var local = loadLocal();
+    if(local){ state.data = local; renderAll(); }
+    fetchRemote(false).catch(function(){
+      if(!state.data){
+        // first run with no cache: try the service worker cache directly
+        return caches.match(DATA_URL).then(function(r){ return r?r.json():null; }).then(function(d){
+          if(d){ state.data=d; saveLocal(d); renderAll(); }
+          else { $('list').innerHTML='<div class="empty">No data yet. Open the app once with internet so it can save the information for offline use.</div>'; $('upd').textContent='No data saved'; }
+        }).catch(function(){ $('upd').textContent='No data saved'; });
+      }
+    });
+  }
+
+  // events
+  $('q').addEventListener('input', function(e){ state.q = e.target.value.trim(); renderList(); });
+  $('chips').addEventListener('click', function(e){
+    var b=e.target.closest('.chip'); if(!b) return;
+    state.cat=b.getAttribute('data-cat'); renderChips(); renderList();
+  });
+  $('list').addEventListener('click', function(e){
+    var h=e.target.closest('button.head'); if(!h) return;
+    var card=h.parentNode, open=card.classList.toggle('open');
+    h.setAttribute('aria-expanded', open);
+  });
+  $('sync').addEventListener('click', function(){
+    if(!navigator.onLine){ toast('You are offline'); return; }
+    fetchRemote(true).catch(function(){ toast('Could not reach the server'); });
+  });
+  window.addEventListener('online', function(){ setNet(); fetchRemote(false).catch(function(){}); });
+  window.addEventListener('offline', setNet);
+
+  // install prompt
+  var deferred=null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred=e; $('installBar').style.display='block'; });
+  $('installBtn').addEventListener('click', function(){
+    if(!deferred) return; deferred.prompt(); deferred.userChoice.then(function(){ deferred=null; $('installBar').style.display='none'; });
+  });
+
+  // service worker (needs https or localhost)
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    });
+  }
+  init();
+})();
+</script>
+</body>
+</html>
